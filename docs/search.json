@@ -1,0 +1,65 @@
+[
+  {
+    "objectID": "analysis.html",
+    "href": "analysis.html",
+    "title": "RT-PCR",
+    "section": "",
+    "text": "The data are in this folder:\n\ndata_folder <- \"/Users/MarcChoisy/Library/CloudStorage/OneDrive-OxfordUniversityClinicalResearchUnit/GitHub/choisy/RT-PCR/data\""
+  },
+  {
+    "objectID": "analysis.html#packages",
+    "href": "analysis.html#packages",
+    "title": "RT-PCR",
+    "section": "Packages",
+    "text": "Packages\nInstalling the required packages if not already installed:\n\nneeded <- c(\"purrr\", \"stringr\", \"mixtools\", \"quantmod\", \"magrittr\", \"dplyr\")\nto_install <- needed[!needed %in% rownames(installed.packages())]\nif (length(to_install)) install.packages(to_install)\n\nLoading the packages:\n\nfor (package in needed) library(package, character.only = TRUE)"
+  },
+  {
+    "objectID": "analysis.html#functions",
+    "href": "analysis.html#functions",
+    "title": "RT-PCR",
+    "section": "Functions",
+    "text": "Functions\nThe \\(x\\) and \\(y\\) labels of the plots:\n\nxlab <- \"temperature (°C)\"\nylab <- \"(-d/dT) fluorescence (465-510)\"\n\nA few utilitary functions:\n\nlines2 <- function(...) lines(..., lwd = 3)\n\nplotl <- function(...) plot(..., type = \"l\", lwd = 3)\n\nplot_fluo <- function(...) plot(..., xlab = xlab, ylab = ylab)\n\nplotl_fluo <- function(...) plotl(..., xlab = xlab, ylab = ylab)\n\nfindPeaks2 <- function(...) {findPeaks(...) - 1}\n\nlegend2 <- function(...) legend(\"topleft\", ..., lty = 1, lwd = 3, bty = \"n\")\n\ngrep_val <- function(...) grep(..., value = TRUE)"
+  },
+  {
+    "objectID": "analysis.html#loading-the-data",
+    "href": "analysis.html#loading-the-data",
+    "title": "RT-PCR",
+    "section": "Loading the data",
+    "text": "Loading the data\nLoading the data from disk:\n\n# names of the files:\nslot_names <- data_folder |> \n  dir() |>\n  str_remove(\".csv\")\n\n# loading all the data into a list of data frames:\nrtpcr <- data_folder |>\n  dir(full.names = TRUE) |> \n  map(read.csv) |> \n  setNames(slot_names)"
+  },
+  {
+    "objectID": "analysis.html#figures",
+    "href": "analysis.html#figures",
+    "title": "RT-PCR",
+    "section": "Figures",
+    "text": "Figures\nLet’s choose one example:\n\na <- rtpcr[[\"021120\"]]\n\nIt looks like this:\n\nplotl_fluo(a[[1]], a[[2]], col = 4)"
+  },
+  {
+    "objectID": "analysis.html#finding-peaks",
+    "href": "analysis.html#finding-peaks",
+    "title": "RT-PCR",
+    "section": "Finding peaks",
+    "text": "Finding peaks\nThe function findPeaks2() allows to easily find peaks:\n\nind <- findPeaks2(a[[2]], .05)\nplotl_fluo(a[[1]], a[[2]], col = 4)\npoints(a[[1]][ind], a[[2]][ind], col = 2, lwd = 3)"
+  },
+  {
+    "objectID": "analysis.html#finding-baseline-noise",
+    "href": "analysis.html#finding-baseline-noise",
+    "title": "RT-PCR",
+    "section": "Finding baseline noise",
+    "text": "Finding baseline noise\nThe function below extracts the baseline noise from the x 2-column dataframe in which the first and second columns correspond to the \\(x\\) and \\(y\\) values respectively:\n\nextract_noise <- function(x, t1, t2, ...) {\n  x |> \n    filter(if_any(1, ~ . < t1 | t2 < .)) |> \n    approx(...) |> \n    extract(c(\"x\", \"y\")) |> \n    as.data.frame()\n}\n\nLet’s try it:\n\nnoise <- extract_noise(a[, 1:2], 76, 91)\nplotl_fluo(a[[1]], a[[2]], col = 4)\nlines2(noise, col = 2, lty = 2)"
+  },
+  {
+    "objectID": "analysis.html#mixture-model",
+    "href": "analysis.html#mixture-model",
+    "title": "RT-PCR",
+    "section": "Mixture model",
+    "text": "Mixture model\nRemoving noise:\nThe b data frame is a duplicate of the a data frame in which the baseline noise has been removed:\n\nb <- a\nb[, 2] <- (b[[2]] - extract_noise(b[, 1:2], 76, 91, xout = b[[1]])$y) |> \n  map_dbl(max, 0)\nplotl_fluo(b[[1]], b[[2]], col = 4)\n\n\n\n\nThe following function disaggregate the -dF/dT and T data into T data:\n\ndisaggregate <- function(x, n) {\n  rep(x[[1]], round(n * x[[2]]))\n}\n\nNormal mixture model:\n\nfmm <- b |> \n  disaggregate(10) |> \n  normalmixEM(1 / length(ind), a[[1]][ind], 1.5)\n\nnumber of iterations= 44 \n\n\nLet’s compare:\n\nxval <- seq(75, 90, le = 500)\n\ncomponents <- fmm |> \n  extract(c(\"mu\", \"sigma\", \"lambda\")) |>\n  pmap(~ dnorm(xval, ..1, ..2) * ..3) |> \n  as.data.frame()\n\nyval <- rowSums(components)\n\neps <- sum(unique(round(diff(b[, 1]), 7)) * b[, 2]) /\n  sum(unique(round(diff(xval), 7)) * yval)\n\nplotl_fluo(b[[1]], b[[2]], col = 4)\nlines2(xval, eps * yval, col = 2)\n\nlegend2(c(\"raw data\", \"model\"), col = c(4, 2))\n\n\n\n\nLet’s plot the individual components:\n\nplotl_fluo(b[[1]], b[[2]], col = 4)\nwalk(eps * components, ~ lines2(xval, .x, col = 2))\nlegend2(c(\"raw data\", \"model\"), col = c(4, 2))\n\n\n\n\nLet’s look at the estimated standard deviations of the individual components:\n\nfmm$sigma\n\n[1] 0.9230092 0.9230092 0.9230092\n\n\nAll equal, which suggest that from now we can just look at the peak value as a good proxy of concentration. But let’s compare the raw peak values with the processed ones. Raw peak values are:\n\n(raw_peaks <- a[[2]][ind])\n\n[1]  7.887872 19.127332  8.961717\n\n\nAfter the processing, the peak values are:\n\n(pcs_peaks <- unname(map_dbl(eps * components, ~ .x[findPeaks2(.x)])))\n\n[1]  6.417572 17.315414  7.770044\n\n\n\nopar <- par(pty = \"s\")\nlims <- c(6, 19)\nplot(pcs_peaks, raw_peaks, xlim = lims, ylim = lims, col = 4, lwd = 3, pch = 3,\n     xlab = \"corrected values\", ylab = \"raw values\")\nabline(0, 1)\n\n\n\npar(opar)"
+  },
+  {
+    "objectID": "analysis.html#looking-at-all-the-data",
+    "href": "analysis.html#looking-at-all-the-data",
+    "title": "RT-PCR",
+    "section": "Looking at all the data",
+    "text": "Looking at all the data\nSome utilitary functions:\n\nmulti_type <- function(x, multi = \"^multi1.*\") {\n  x[c(\"Tm\", grep_val(multi, names(x)))]\n}\n\nremove_1col_df <- function(x) {\n  x[map_int(x, ncol) > 1]\n}\n\nThe following function draws all the lines of one data frame:\n\nplotx <- function(x, y = NA) {\n  xval <- x[[1]]\n  yval <- x[, -1]\n  plot(rep(xval, ncol(yval)), unlist(yval), type = \"n\", xlab = xlab, ylab = ylab)\n  walk(yval, ~ lines(xval, .x, col = 4))\n  title(y)\n}\n\nLet’s try it:\n\nplotx(a[c(\"Tm\", grep_val(\"^multi1.*\", names(a)))])\n\n\n\nplotx(a[c(\"Tm\", grep_val(\"^multi2.*\", names(a)))])\n\n\n\n\nThe following function draws of the lines of a list of data frames:\n\nplotxx <- function(x) {\n  f <- function(y) {\n    xval <- y[[1]]\n    yval <- y[, -1]\n    data.frame(rep(xval, ncol(yval)), unlist(yval))\n  }\n  \n  g <- function(y) {\n    xval <- y[[1]]\n    yval <- y[, -1]\n    walk(yval, ~ lines(xval, .x, col = adjustcolor(4, .1)))\n  }\n  \n  x |>\n    map(f) |> \n    bind_rows() |> \n    plot(type = \"n\", xlab = xlab, ylab = ylab)\n  \n  walk(x, g)\n}\n\nLet’s try it on the multi1:\n\nrtpcr |>\n  map(multi_type, \"^multi1.*\") |> \n  remove_1col_df() |> \n  plotxx()\n\n\n\n\nAnd on the multi2:\n\nrtpcr |>\n  map(multi_type, \"^multi2.*\") |> \n  remove_1col_df() |> \n  plotxx()\n\n\n\n\n\nmulti1 <- rtpcr |>\n  map(multi_type, \"^multi1.*\") |> \n  remove_1col_df()"
+  }
+]
