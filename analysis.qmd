@@ -1,5 +1,5 @@
 ---
-title: "RT-PCR"
+title: "Real-time PCR melting curves analysis"
 format: html
 editor: visual
 editor_options: 
@@ -9,6 +9,8 @@ editor_options:
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(cache = TRUE)
 ```
+
+The corresponding R code files are [here](https://github.com/choisy/RT-PCR).
 
 ## Global parameters
 
