@@ -3,5 +3,5 @@
 .RData
 .Ruserdata
 analysis_cache/
-analysis_files/
+/analysis_files/
 /.quarto/
